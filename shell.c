@@ -4,13 +4,19 @@
 #include <string.h>
 #include <wait.h>
 #include <ctype.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/utsname.h>  //uname
 
 #define MAXWORDS 200
 #define MAXCMDS 200
-#define MAXINTERN 3
+#define MAXINTERN 6
 
+#define MAX_DIR_NAME_LEN 1024
+#define MAT_NUM /*is211*/"818"
 //#ifdef DEBUG_PRINT
 
+extern char **environ;
 
 void parse_cmds(char** cmdv, char* cmdline, int *anzcmds);
 void parse_words(char** wordv, char* cmdline, int *anzwords);
@@ -31,15 +37,50 @@ void ausgeben(int argc, char** argv) {
     putchar('\n');
 } 
 
+char* get_working_dir();
+void print_promt();
+void print_working_dir();
+
+void print_info(){
+    printf("Process information:\n");
+    
+    //https://www.man7.org/linux/man-pages/man3/getumask.3.html
+    //get umask by setting new one and set it back
+    mode_t mask = umask( 0 );
+    umask(mask);
+
+    printf("uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getuid(), geteuid(), getgid(), getegid(), mask);
+    
+    printf("working dir: %s\n\n", get_working_dir());
+
+    printf("# environment:\n");
+    char **env = environ;
+    while(*env != NULL) {
+        printf("  %s\n", *env);
+        env++;
+    }
+
+
+}
+
+
+
+void change_dir(){
+    ;
+}
+
 typedef struct interncmd_st {
     char* name;
     void (*fkt)(int argc, char** argv);
 } interncmd_t;
 
 interncmd_t interncmds[MAXINTERN] = {
-    {"ende", beenden},
+    {"818-ende", beenden},
     {"quit", beenden},
     {"echo", ausgeben},
+    {"818-info", print_info},
+    {"818-wo", print_working_dir},
+    {"cd", change_dir}
 };
 
 
@@ -71,8 +112,7 @@ int main() {
     int fd0save;
 
     for(;;) {
-    printf("$-> ");
-
+        print_promt();
 
         cmdlen = getline(&cmdline, &cmdlen,stdin);
         parse_cmds(cmdv, cmdline, &anzcmds);
@@ -181,4 +221,28 @@ void print_vec(char **v, int anz) {
     for (int i = 0; i<anz; ++i) {
         printf("%d: %s\n",i, v[i]);
     }
+}
+
+char* get_working_dir(){
+    char dir_name[MAX_DIR_NAME_LEN];
+    if(getcwd(dir_name,sizeof(dir_name)) == NULL){
+        perror("getcwd");
+        exit(1);
+    }
+#ifdef DEBUG_PRINT    
+    printf("current working dir: %s\n", dir_name);
+#endif
+    return strdup(dir_name);
+}
+
+void print_promt(){
+    if(geteuid() != 0){
+        printf("%s-%s > ", MAT_NUM, get_working_dir());
+    } else{
+        printf("%s-%s >> ", MAT_NUM, get_working_dir());
+    }
+}
+
+void print_working_dir(){
+    printf("%s\n",get_working_dir());
 }
