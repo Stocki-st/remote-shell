@@ -11,7 +11,7 @@
 
 #define MAXWORDS 200
 #define MAXCMDS 200
-#define MAXINTERN 6
+#define MAXINTERN 8
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/"818"
@@ -97,6 +97,36 @@ void change_dir(int argc, char** argv){
     }
 }
 
+void set_path(int argc, char** argv){
+    const int override = 1;
+    if(argc > 1){
+        if(setenv("PATH", argv[1], override) == -1){
+            perror("setenv");            
+        }
+    }
+}
+
+void add_to_path(int argc, char** argv){
+  if(argc > 1){
+     char *path = getenv("PATH");
+     char *extension_sign = ":";
+     
+     int extended_path_len = strlen(path)+strlen(extension_sign)+strlen(argv[1])+1; //+1 for terminator
+     char extended_path[extended_path_len];    
+     //store the "new" path (including given argument)   
+     if(snprintf(extended_path,extended_path_len,"%s%s%s",path,extension_sign,argv[1]);
+
+#ifdef DEBUG_PRINT
+     printf("path_len=%d\n", extended_path_len);
+     printf("path='%s'\n", path);
+     printf("extended_path='%s'\n", extended_path);
+#endif
+     
+     set_path(extended_path);
+  }
+}
+
+
 typedef struct interncmd_st {
     char* name;
     void (*fkt)(int argc, char** argv);
@@ -108,7 +138,9 @@ interncmd_t interncmds[MAXINTERN] = {
     {"echo", ausgeben},
     {"818-info", print_info},
     {"818-wo", print_working_dir},
-    {"cd", change_dir}
+    {"cd", change_dir},
+    {"818-setpath", set_path},
+    {"818-addtopath", add_to_path}
 };
 
 
