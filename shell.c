@@ -27,104 +27,17 @@ void execute (char **v, int anz, int letztes);
 
 int getInternIdx(char* cmdline);
 
-void beenden(int argc, char** argv) {
-    printf("Thx for using - donate here!\n");
-    exit (argc>1 ? atoi(argv[1]) : 0);
-}
-void ausgeben(int argc, char** argv) {
-    while(--argc) {
-        printf("%s ",*++argv);
-    }
-    putchar('\n');
-} 
 
+void beenden(int argc, char** argv);
+void ausgeben(int argc, char** argv);
+void add_to_path(int argc, char** argv);
+void set_path(int argc, char** argv);
+void change_dir(int argc, char** argv);
 char* get_working_dir();
 void print_promt();
 void print_working_dir();
+void print_info();
 
-void print_info(){
-    printf("Process information:\n");
-    
-    //https://www.man7.org/linux/man-pages/man3/getumask.3.html
-    //get umask by setting new one and set it back
-    mode_t mask = umask( 0 );
-    umask(mask);
-
-    printf("pid=%d, ppid=%d, uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getpid(), getppid(), geteuid(), getgid(), getegid(), mask);
-    
-    printf("working dir: %s\n\n", get_working_dir());
-
-    printf("# Signalhandler:\n");
-      for(int signo=1; signo<=31; signo++) {
-        struct sigaction sa;
-        sigaction(signo, NULL, &sa);
-        printf("signal %d - handler: %p, sigaction: %p, mask: %d, flags: %d\n",signo, sa.sa_handler, sa.sa_sigaction, sa.sa_mask, sa.sa_flags);
-  }
-
-    
-    printf("\n# environment:\n");
-    char **env = environ;
-    while(*env != NULL) {
-        printf("  %s\n", *env);
-        env++;
-    }
-
-
-}
-
-
-
-void change_dir(int argc, char** argv){
-#ifdef DEBUG_PRINT
-    printf("in change_dir, argc: %d\n", argc);
-#endif
-    if(argc > 1 ){
-        if(chdir((const char *) argv[1])==-1){
-            perror("chdir");
-        }
-    }else{
-        const char* home_dir = getenv("HOME");
-#ifdef DEBUG_PRINT
-        printf("home_dir: %s\n", home_dir);
-#endif       
-        if(home_dir == NULL){
-            perror("getenv(HOME)");
-            return;
-        }
-        if(chdir(home_dir)==-1){
-            perror("chdir");
-        }
-    }
-}
-
-void set_path(int argc, char** argv){
-    const int override = 1;
-    if(argc > 1){
-        if(setenv("PATH", argv[1], override) == -1){
-            perror("setenv");            
-        }
-    }
-}
-
-void add_to_path(int argc, char** argv){
-  if(argc > 1){
-     char *path = getenv("PATH");
-     char *extension_sign = ":";
-     
-     int extended_path_len = strlen(path)+strlen(extension_sign)+strlen(argv[1])+1; //+1 for terminator
-     char extended_path[extended_path_len];    
-     //store the "new" path (including given argument)   
-     if(snprintf(extended_path,extended_path_len,"%s%s%s",path,extension_sign,argv[1]);
-
-#ifdef DEBUG_PRINT
-     printf("path_len=%d\n", extended_path_len);
-     printf("path='%s'\n", path);
-     printf("extended_path='%s'\n", extended_path);
-#endif
-     
-     set_path(extended_path);
-  }
-}
 
 
 typedef struct interncmd_st {
@@ -144,23 +57,6 @@ interncmd_t interncmds[MAXINTERN] = {
 };
 
 
-int getInternIdx(char* cmdline) {
-    char* pos;
-    size_t sz;
-    while(isspace(*cmdline)) {
-        ++cmdline;
-    }
-
-    for(int i=0; i<MAXINTERN; ++i) {
-        pos=strpbrk(cmdline," \t");
-        sz = pos ? (pos-cmdline) : strlen(interncmds[i].name);
-        if(strncmp(cmdline,interncmds[i].name,sz)==0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 
 int main() {
     char  *cmdline;
@@ -176,11 +72,11 @@ int main() {
 
         cmdlen = getline(&cmdline, &cmdlen,stdin);
         parse_cmds(cmdv, cmdline, &anzcmds);
-        
+
 #ifdef DEBUG_PRINT
         print_vec(cmdv, anzcmds);
 #endif
-                internIdx = getInternIdx(cmdv[anzcmds-1]);
+        internIdx = getInternIdx(cmdv[anzcmds-1]);
 
         if(internIdx == -1) {
             switch(pid=fork()) {
@@ -253,11 +149,12 @@ void execute(char **cmdv, int anz, int letztes) {
         exit(3);
     } else {
         interncmds[internNr].fkt(anzworte, words);
-        if(!letztes){
-            exit(0);            
+        if(!letztes) {
+            exit(0);
         }
     }
 }
+
 
 void parse_cmds(char** cmdv, char* cmdline, int *anzcmds) {
 
@@ -275,34 +172,146 @@ void parse_words(char** wordv, char* cmdline, int *anzwords) {
         ;
 }
 
+int getInternIdx(char* cmdline) {
+    char* pos;
+    size_t sz;
+    while(isspace(*cmdline)) {
+        ++cmdline;
+    }
+
+    for(int i=0; i<MAXINTERN; ++i) {
+        pos=strpbrk(cmdline," \t");
+        sz = pos ? (pos-cmdline) : strlen(interncmds[i].name);
+        if(strncmp(cmdline,interncmds[i].name,sz)==0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+char* get_working_dir() {
+    char dir_name[MAX_DIR_NAME_LEN];
+    if(getcwd(dir_name,sizeof(dir_name)) == NULL) {
+        perror("getcwd");
+        exit(1);
+    }
+#ifdef DEBUG_PRINT
+    printf("current working dir: %s\n", dir_name);
+#endif
+    return strdup(dir_name);
+}
+
+void beenden(int argc, char** argv) {
+    printf("Thx for using - donate here!\n");
+    exit (argc>1 ? atoi(argv[1]) : 0);
+}
+
+void ausgeben(int argc, char** argv) {
+    while(--argc) {
+        printf("%s ",*++argv);
+    }
+    putchar('\n');
+}
+
+void print_info() {
+    printf("Process information:\n");
+
+    //https://www.man7.org/linux/man-pages/man3/getumask.3.html
+    //get umask by setting new one and set it back
+    mode_t mask = umask( 0 );
+    umask(mask);
+
+    printf("pid=%d, ppid=%d, uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getpid(), getppid(), geteuid(), getgid(), getegid(), mask);
+
+    printf("working dir: %s\n\n", get_working_dir());
+
+    printf("# Signalhandler:\n");
+    for(int signo=1; signo<=31; signo++) {
+        struct sigaction sa;
+        sigaction(signo, NULL, &sa);
+        printf("signal %d - handler: %p, sigaction: %p, mask: %d, flags: %d\n",signo, sa.sa_handler, sa.sa_sigaction, sa.sa_mask, sa.sa_flags);
+    }
+
+    printf("\n# environment:\n");
+    char **env = environ;
+    while(*env != NULL) {
+        printf("  %s\n", *env);
+        env++;
+    }
+
+
+}
+
+void change_dir(int argc, char** argv) {
+#ifdef DEBUG_PRINT
+    printf("in change_dir, argc: %d\n", argc);
+#endif
+    if(argc > 1 ) {
+        if(chdir((const char *) argv[1])==-1) {
+            perror("chdir");
+        }
+    } else {
+        const char* home_dir = getenv("HOME");
+#ifdef DEBUG_PRINT
+        printf("home_dir: %s\n", home_dir);
+#endif
+        if(home_dir == NULL) {
+            perror("getenv(HOME)");
+            return;
+        }
+        if(chdir(home_dir)==-1) {
+            perror("chdir");
+        }
+    }
+}
+
+void set_path(int argc, char** argv) {
+    const int override = 1;
+    if(argc > 1) {
+        if(setenv("PATH", argv[1], override) == -1) {
+            perror("setenv");
+        }
+    }
+}
+
+void add_to_path(int argc, char** argv) {
+    if(argc > 1) {
+        char *path = getenv("PATH");
+        char *extension_sign = ":";
+
+        int extended_path_len = strlen(path)+strlen(extension_sign)+strlen(argv[1])+1; //+1 for terminator
+        char extended_path[extended_path_len];
+        //store the "new" path (including given argument)
+        snprintf(extended_path,extended_path_len,"%s%s%s",path,extension_sign,argv[1]);
+
+#ifdef DEBUG_PRINT
+        printf("path_len=%d\n", extended_path_len);
+        printf("path='%s'\n", path);
+        printf("extended_path='%s'\n", extended_path);
+#endif
+        const int override = 1;
+
+        if(setenv("PATH", extended_path, override) == -1) {
+            perror("setenv");
+        }
+    }
+}
+
+void print_promt() {
+    if(geteuid() != 0) {
+        printf("%s-%s > ", MAT_NUM, get_working_dir());
+    } else {
+        printf("%s-%s >> ", MAT_NUM, get_working_dir());
+    }
+}
+
+void print_working_dir() {
+    printf("%s\n",get_working_dir());
+}
 
 void print_vec(char **v, int anz) {
 
     for (int i = 0; i<anz; ++i) {
         printf("%d: %s\n",i, v[i]);
     }
-}
-
-char* get_working_dir(){
-    char dir_name[MAX_DIR_NAME_LEN];
-    if(getcwd(dir_name,sizeof(dir_name)) == NULL){
-        perror("getcwd");
-        exit(1);
-    }
-#ifdef DEBUG_PRINT    
-    printf("current working dir: %s\n", dir_name);
-#endif
-    return strdup(dir_name);
-}
-
-void print_promt(){
-    if(geteuid() != 0){
-        printf("%s-%s > ", MAT_NUM, get_working_dir());
-    } else{
-        printf("%s-%s >> ", MAT_NUM, get_working_dir());
-    }
-}
-
-void print_working_dir(){
-    printf("%s\n",get_working_dir());
 }
