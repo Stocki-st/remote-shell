@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>  //uname
+#include <signal.h>
 
 #define MAXWORDS 200
 #define MAXCMDS 200
@@ -14,7 +15,7 @@
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/"818"
-//#ifdef DEBUG_PRINT
+#define DEBUG_PRINT
 
 extern char **environ;
 
@@ -49,11 +50,19 @@ void print_info(){
     mode_t mask = umask( 0 );
     umask(mask);
 
-    printf("uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getuid(), geteuid(), getgid(), getegid(), mask);
+    printf("pid=%d, ppid=%d, uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getpid(), getppid(), geteuid(), getgid(), getegid(), mask);
     
     printf("working dir: %s\n\n", get_working_dir());
 
-    printf("# environment:\n");
+    printf("# Signalhandler:\n");
+      for(int signo=1; signo<=31; signo++) {
+        struct sigaction sa;
+        sigaction(signo, NULL, &sa);
+        printf("signal %d - handler: %p, sigaction: %p, mask: %d, flags: %d\n",signo, sa.sa_handler, sa.sa_sigaction, sa.sa_mask, sa.sa_flags);
+  }
+
+    
+    printf("\n# environment:\n");
     char **env = environ;
     while(*env != NULL) {
         printf("  %s\n", *env);
@@ -65,8 +74,27 @@ void print_info(){
 
 
 
-void change_dir(){
-    ;
+void change_dir(int argc, char** argv){
+#ifdef DEBUG_PRINT
+    printf("in change_dir, argc: %d\n", argc);
+#endif
+    if(argc > 1 ){
+        if(chdir((const char *) argv[1])==-1){
+            perror("chdir");
+        }
+    }else{
+        const char* home_dir = getenv("HOME");
+#ifdef DEBUG_PRINT
+        printf("home_dir: %s\n", home_dir);
+#endif       
+        if(home_dir == NULL){
+            perror("getenv(HOME)");
+            return;
+        }
+        if(chdir(home_dir)==-1){
+            perror("chdir");
+        }
+    }
 }
 
 typedef struct interncmd_st {
@@ -192,7 +220,7 @@ void execute(char **cmdv, int anz, int letztes) {
         perror("exec");
         exit(3);
     } else {
-        interncmds[internNr].fkt(anz, words);
+        interncmds[internNr].fkt(anzworte, words);
         if(!letztes){
             exit(0);            
         }
