@@ -7,7 +7,9 @@
 #include <sys/types.h>
 #include <sys/utsname.h>  //uname
 #include <unistd.h>
+#include <fcntl.h>
 #include <wait.h>
+#include <pthread.h>
 
 #define MAXWORDS 200
 #define MAXCMDS 200
@@ -15,7 +17,7 @@
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/ "818"
-#define DEBUG_PRINT
+//#define DEBUG_PRINT
 
 extern char** environ;
 
@@ -47,14 +49,47 @@ interncmd_t interncmds[MAXINTERN] = {
     {"818-wo", print_working_dir}, {"cd", change_dir}, {"818-setpath", set_path}, {"818-addtopath", add_to_path}};
 
 int check_background_mode(char** argv) {
-  int detached = !strcmp((argv)[0], "&");
-  if (detached) {
-    ++(*argv);  // Move past the & argument
-  }
-  return detached;
+    printf("arg0 %s",argv);
+    return !strncmp((*argv), "&",1);
 }
 
-int main() {
+void *wait_for_child(void *data) {
+    pid_t child_pid = *((pid_t *)data); // My argument is a PID
+    int status;
+    pid_t w = waitpid(child_pid, &status, 0); // Block until our child died
+    if (w == -1) {
+        perror("waitpid");
+        exit(1);
+    }
+#ifdef DEBUG_PRINT
+    if (WIFEXITED(status)) {
+        printf("[detached] exited, status=%d\n", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        printf("[detached] killed by signal %d\n", WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        printf("[detached] stopped by signal %d\n", WSTOPSIG(status));
+    } else  {
+        printf("[detached] returned exit code %d\n", status);
+    }
+
+#endif
+    return NULL;
+}
+
+void detach_waiting(pid_t pid) {
+    pid_t *thread_data;
+    pthread_t thread;
+    thread_data = calloc(sizeof(pid_t), 1);
+    *thread_data = pid;
+
+    if(pthread_create(&thread, NULL, wait_for_child, (void *)thread_data)) {
+        free(thread_data);
+        return;
+    }
+    pthread_detach(thread);
+}
+
+int main(int argc, char** argv){
   char* cmdline;
   size_t cmdlen = 0;
   char* cmdv[MAXCMDS];
@@ -63,31 +98,61 @@ int main() {
   int internIdx;
   int fd0save;
 
+/*
+  if (argc <= 2) {
+      if (strcmp(argv[1], "--nosuid") == 0) {
+          if(geteuid() != 0){
+
+          }
+     }
+   }
+*/
   for (;;) {
     print_promt();
-
     cmdlen = getline(&cmdline, &cmdlen, stdin);
     parse_cmds(cmdv, cmdline, &anzcmds);
+
+    if(anzcmds == 1 && !strncmp((cmdv[0]), "\n",1)){
+#ifdef DEBUG_PRINT
+        printf("skip execution - no cmd, just newline'\n");
+#endif
+        continue;
+    }
 
 #ifdef DEBUG_PRINT
     print_vec(cmdv, anzcmds);
 #endif
-    internIdx = getInternIdx(cmdv[anzcmds - 1]);
-    int run_detached = check_background_mode(cmdv);
+    int run_detached = !strncmp((cmdv[0]), "&",1);
+    if(run_detached){
+        (*cmdv)++;  // Move past the & argument
+    }
 
+
+#ifdef DEBUG_PRINT
+    printf("detached mode: %d\n", run_detached);
+    print_vec(cmdv, anzcmds);
+#endif
+    internIdx = getInternIdx(cmdv[anzcmds - 1]);
     if (internIdx == -1) {
       switch (pid = fork()) {
         case -1:
           perror("fork");
           break;
         case 0:
+          //child
           execute(cmdv, anzcmds, 0);
           break;
         default:
+            //parent
           if (run_detached) {
-            break;
+              detach_waiting(pid);
+              break;
           } else {
             int status = 0;
+
+#ifdef DEBUG_PRINT
+            printf("wait for child with pid %d\n", pid);
+#endif
             pid_t w = waitpid(pid, &status, 0);
             if (w == -1) {
               perror("waitpid");
@@ -137,6 +202,7 @@ void execute(char** cmdv, int anz, int letztes) {
         perror("fork");
         break;
       case 0:
+        // child
         fclose(stdout);
         dup2(pd[1], 1);           // überschreibt stdout FD mit der schreibseite der pipe
         stdout = fdopen(1, "w");  // wegen interer cmds auch die stdio clib
@@ -145,6 +211,7 @@ void execute(char** cmdv, int anz, int letztes) {
         execute(cmdv, anz - 1, 0);
         break;
       default:
+        //parent
         fclose(stdin);
         dup2(pd[0], 0);          // überschreibt stdout FD mit der leseseite der pipe
         stdin = fdopen(0, "r");  // wegen interer cmds auch die stdio clib
@@ -221,7 +288,7 @@ void ausgeben(int argc, char** argv) {
     printf("%s ", *++argv);
   }
   putchar('\n');
-}
+ }
 
 void print_info() {
   printf("Process information:\n");
@@ -313,6 +380,7 @@ void print_promt() {
   } else {
     printf("%s-%s >> ", MAT_NUM, get_working_dir());
   }
+  fflush(stdout);
 }
 
 void print_working_dir() { printf("%s\n", get_working_dir()); }
