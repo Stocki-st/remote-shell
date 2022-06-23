@@ -13,7 +13,7 @@
 
 #define MAXWORDS 200
 #define MAXCMDS 200
-#define MAXINTERN 12
+#define MAXINTERN 11
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/ "818"
@@ -23,27 +23,28 @@ extern char** environ;
 
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds);
 void parse_words(char** wordv, char* cmdline, int* anzwords);
-
-void print_vec(char** v, int anz);
 void execute(char** v, int anz, int letztes);
+int get_intern_cmd_idx(char* cmdline);
+void print_vec(char** v, int anz);
+char* get_working_dir();
+void print_promt();
+void print_stat(char* name);
 
-int getInternIdx(char* cmdline);
-
-void beenden(int argc, char** argv);
-void ausgeben(int argc, char** argv);
+/*
+ * internal cmds
+ */
+void quit_shell(int argc, char** argv);
+void echo(int argc, char** argv);
 void add_to_path(int argc, char** argv);
 void set_path(int argc, char** argv);
 void change_dir(int argc, char** argv);
-char* get_working_dir();
-void print_promt();
 void print_working_dir();
 void print_info();
+void get_path();
 
-void get_path() {
-}
+void detach_waiting(pid_t pid);
+void *wait_for_child(void *data);
 
-void print_help() {
-}
 
 typedef struct interncmd_st {
     char* name;
@@ -51,82 +52,20 @@ typedef struct interncmd_st {
 } interncmd_t;
 
 interncmd_t interncmds[MAXINTERN] = {
-    {"818-ende", beenden},
-    {"quit", beenden},
-    {"echo", ausgeben}, 
-    {"818-echo", ausgeben},
+    {"quit", quit_shell},
+    {"818-ende", quit_shell},
+    {"echo", echo},
+    {"818-echo", echo},
     {"818-info", print_info},
-    {"818-wo", print_working_dir}, 
-    {"cd", change_dir}, 
-    {"818-cd", change_dir}, 
-    {"818-setpath", set_path}, 
+    {"818-wo", print_working_dir},
+    {"cd", change_dir},
+    {"818-cd", change_dir},
+    {"818-setpath", set_path},
     {"818-addtopath", add_to_path},
-    {"818-getpath", get_path}, 
-    {"818-help", print_help}, 
-};
+    {"818-getpath", get_path}};
 
-
-void *wait_for_child(void *data) {
-    pid_t child_pid = *((pid_t *)data); // My argument is a PID
-    int status;
-    pid_t w = waitpid(child_pid, &status, 0); // Block until our child died
-    if (w == -1) {
-        perror("waitpid");
-        exit(1);
-    }
-#ifdef DEBUG_PRINT
-    if (WIFEXITED(status)) {
-        printf("[detached] exited, status=%d\n", WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        printf("[detached] killed by signal %d\n", WTERMSIG(status));
-    } else if (WIFSTOPPED(status)) {
-        printf("[detached] stopped by signal %d\n", WSTOPSIG(status));
-    } else  {
-        printf("[detached] returned exit code %d\n", status);
-    }
-
-#endif
-    return NULL;
-}
-
-void detach_waiting(pid_t pid) {
-    pid_t *thread_data;
-    pthread_t thread;
-    thread_data = calloc(sizeof(pid_t), 1);
-    *thread_data = pid;
-
-    if(pthread_create(&thread, NULL, wait_for_child, (void *)thread_data)) {
-        free(thread_data);
-        return;
-    }
-    pthread_detach(thread);
-}
-
-void print_stat(char* name){
- struct stat fileStat;
-    if(stat(name, &fileStat) < 0)    
-        return 1;
-
-    printf("Information for %s\n", name);
-    printf("---------------------------\n");
-    printf("File Size: \t\t%d bytes\n", fileStat.st_size);
-    printf("Number of Links: \t%d\n", fileStat.st_nlink);
-    printf("File inode: \t\t%d\n", fileStat.st_ino);
-
-    printf("File Permissions: \t");
-    printf( (S_ISDIR(fileStat.st_mode)) ? "d" : "-");
-    printf( (fileStat.st_mode & S_IRUSR) ? "r" : "-");
-    printf( (fileStat.st_mode & S_IWUSR) ? "w" : "-");
-    printf( (fileStat.st_mode & S_IXUSR) ? "x" : "-");
-    printf( (fileStat.st_mode & S_IRGRP) ? "r" : "-");
-    printf( (fileStat.st_mode & S_IWGRP) ? "w" : "-");
-    printf( (fileStat.st_mode & S_IXGRP) ? "x" : "-");
-    printf( (fileStat.st_mode & S_IROTH) ? "r" : "-");
-    printf( (fileStat.st_mode & S_IWOTH) ? "w" : "-");
-    printf( (fileStat.st_mode & S_IXOTH) ? "x" : "-");
-    printf("\n\n");   
-}
-
+    
+    
 int main(int argc, char** argv) {
     char* cmdline;
     size_t cmdlen = 0;
@@ -136,43 +75,44 @@ int main(int argc, char** argv) {
     int internIdx;
     int fd0save;
     int nosuid = 0;
-    
+
+    // ignore SIGINT and SIGQUIT
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
 
 
     if (argc >= 2) {
-          if (strcmp(argv[1], "--nosuid") == 0) {
-              printf("[mode: '--nosuid' ]\n");
-              nosuid = 1;
-              print_stat(argv[0]);
-              if(geteuid() != 0){
-                  /*needed? i check die angabe ned ganz :D
-                   * if (seteuid(0) < 0) {
-                     perror("seteuid");
-                     exit(1);
-                   */
-                  
-           }
-              }
-         }
-       
-
-       
-    for (;;) {
-        if(nosuid){
-            printf("[noSUID] ");
-        } 
-        print_promt();
-             
-        cmdlen = getline(&cmdline, &cmdlen, stdin);
-        
-        if(cmdlen == -1){
-           //avoid endless circle of death :O
-           printf("\n'ctrl' + 'D' entered - exit\n");
-           break;
+        if (strcmp(argv[1], "--nosuid") == 0) {
+            printf("[mode: '--nosuid' ]\n");
+            nosuid = 1;
+            print_stat(argv[0]);
+            if(geteuid() != 0) {
+                /*needed? i check die angabe ned ganz :D
+                 * if (seteuid(0) < 0) {
+                   perror("seteuid");
+                   exit(1);
+  
+                */
+            }
         }
-        
+    }
+
+
+
+    for (;;) {
+        if(nosuid) {
+            printf("[noSUID] ");
+        }
+        print_promt();
+
+        cmdlen = getline(&cmdline, &cmdlen, stdin);
+
+        if(cmdlen == -1) {
+            //avoid endless circle of death :O
+            printf("\n'ctrl' + 'D' entered - exit\n");
+            break;
+        }
+
         parse_cmds(cmdv, cmdline, &anzcmds);
 
         // check if cmd is more than just an enter stroke
@@ -196,7 +136,7 @@ int main(int argc, char** argv) {
         printf("detached mode: %d\n", run_detached);
         print_vec(cmdv, anzcmds);
 #endif
-        internIdx = getInternIdx(cmdv[anzcmds - 1]);
+        internIdx = get_intern_cmd_idx(cmdv[anzcmds - 1]);
         if (internIdx == -1) {
             switch (pid = fork()) {
             case -1:
@@ -294,7 +234,7 @@ void execute(char** cmdv, int anz, int letztes) {
 #ifdef DEBUG_PRINT
     print_vec(words, anzworte);
 #endif
-    internNr = getInternIdx(cmdv[anz - 1]);
+    internNr = get_intern_cmd_idx(cmdv[anz - 1]);
     if (internNr == -1) {
         execvp(words[0], words);
         perror("exec");
@@ -319,7 +259,7 @@ void parse_words(char** wordv, char* cmdline, int* anzwords) {
         ;
 }
 
-int getInternIdx(char* cmdline) {
+int get_intern_cmd_idx(char* cmdline) {
     char* pos;
     size_t sz;
     while (isspace(*cmdline)) {
@@ -336,6 +276,54 @@ int getInternIdx(char* cmdline) {
     return -1;
 }
 
+
+void print_promt() {
+    if (geteuid() != 0) {
+        printf("%s-%s > ", MAT_NUM, get_working_dir());
+    } else {
+        printf("%s-%s >> ", MAT_NUM, get_working_dir());
+    }
+    fflush(stdout);
+}
+
+
+void *wait_for_child(void *data) {
+    pid_t child_pid = *((pid_t *)data); // My argument is a PID
+    int status;
+    pid_t w = waitpid(child_pid, &status, 0); // Block until our child died
+    if (w == -1) {
+        perror("waitpid");
+        exit(1);
+    }
+#ifdef DEBUG_PRINT
+    // print exit state of detached thread (backgroud execution)
+    if (WIFEXITED(status)) {
+        printf("[detached] exited, status=%d\n", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        printf("[detached] killed by signal %d\n", WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        printf("[detached] stopped by signal %d\n", WSTOPSIG(status));
+    } else  {
+        printf("[detached] returned exit code %d\n", status);
+    }
+
+#endif
+    return NULL;
+}
+
+void detach_waiting(pid_t pid) {
+    pid_t *thread_data;
+    pthread_t thread;
+    thread_data = calloc(sizeof(pid_t), 1);
+    *thread_data = pid;
+
+    if(pthread_create(&thread, NULL, wait_for_child, (void *)thread_data)) {
+        free(thread_data);
+        return;
+    }
+    pthread_detach(thread);
+}
+
 char* get_working_dir() {
     char dir_name[MAX_DIR_NAME_LEN];
     if (getcwd(dir_name, sizeof(dir_name)) == NULL) {
@@ -348,12 +336,49 @@ char* get_working_dir() {
     return strdup(dir_name);
 }
 
-void beenden(int argc, char** argv) {
+void print_stat(char* name) {
+    struct stat file_stat;
+    if(stat(name, &file_stat) < 0) {
+        perror(name);
+        return;
+    }
+    printf("Information for %s\n", name);
+    printf("---------------------------\n");
+    printf("File Size: \t\t%ld bytes\n", file_stat.st_size);
+    printf("Number of Links: \t%ld\n", file_stat.st_nlink);
+    printf("File inode: \t\t%ld\n", file_stat.st_ino);
+
+    printf("File Permissions: \t");
+    printf( (S_ISDIR(file_stat.st_mode)) ? "d" : "-");
+    printf( (file_stat.st_mode & S_IRUSR) ? "r" : "-");
+    printf( (file_stat.st_mode & S_IWUSR) ? "w" : "-");
+    printf( (file_stat.st_mode & S_IXUSR) ? "x" : "-");
+    printf( (file_stat.st_mode & S_IRGRP) ? "r" : "-");
+    printf( (file_stat.st_mode & S_IWGRP) ? "w" : "-");
+    printf( (file_stat.st_mode & S_IXGRP) ? "x" : "-");
+    printf( (file_stat.st_mode & S_IROTH) ? "r" : "-");
+    printf( (file_stat.st_mode & S_IWOTH) ? "w" : "-");
+    printf( (file_stat.st_mode & S_IXOTH) ? "x" : "-");
+    printf("\n\n");
+}
+
+void print_vec(char** v, int anz) {
+    for (int i = 0; i < anz; ++i) {
+        printf("%d: %s\n", i, v[i]);
+    }
+}
+
+
+/*
+ * internal cmds
+ */
+
+void quit_shell(int argc, char** argv) {
     printf("Thx for using - donate here!\n");
     exit(argc > 1 ? atoi(argv[1]) : 0);
 }
 
-void ausgeben(int argc, char** argv) {
+void echo(int argc, char** argv) {
     while (--argc) {
         printf("%s ", *++argv);
     }
@@ -380,7 +405,7 @@ void print_info() {
         printf("signal %d - handler: %p, sigaction: %p, mask: %p, flags: %d\n", signo, sa.sa_handler, sa.sa_sigaction,
                sa.sa_mask, sa.sa_flags);
     }
-
+    
     printf("\n# environment:\n");
     char** env = environ;
     while (*env != NULL) {
@@ -444,21 +469,10 @@ void add_to_path(int argc, char** argv) {
     }
 }
 
-void print_promt() {
-    if (geteuid() != 0) {
-        printf("%s-%s > ", MAT_NUM, get_working_dir());
-    } else {
-        printf("%s-%s >> ", MAT_NUM, get_working_dir());
-    }
-    fflush(stdout);
+void get_path() {
+    printf("PATH: %s\n",getenv("PATH"));
 }
 
 void print_working_dir() {
     printf("%s\n", get_working_dir());
-}
-
-void print_vec(char** v, int anz) {
-    for (int i = 0; i < anz; ++i) {
-        printf("%d: %s\n", i, v[i]);
-    }
 }
