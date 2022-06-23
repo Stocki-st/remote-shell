@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
                 cap_get_flag(caps,i, CAP_INHERITABLE, &cap_inherit);
                 
                 printf("CAP '%s': permitted: %d, effective: %d, inheritable: %d\n", cap_to_name(i),
-                       (cap_perm == CAP_SET), (cap_eff== CAP_SET), (cap_inherit== CAP_SET));
+                       cap_perm, cap_eff, cap_inherit);
             }
             if(geteuid() != 0) {
                 /*needed? i check die angabe ned ganz :D
