@@ -16,7 +16,7 @@ make format
 
 build 
 ```
-make all
+make
 ```
 
 
@@ -24,7 +24,7 @@ make all
 
 There are 2 modes available:
 
-1. "normal" --> no argument passen
+1. "normal" --> no argument passed
 
 ```
 ./shell
@@ -37,9 +37,6 @@ There are 2 modes available:
 ```
 
 ## General information:
-############################
-### Welcome to my shell! ###
-############################
 
 the following internal cmds are supported:
  - 'echo'          ... prints the given input (echos it)
