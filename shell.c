@@ -40,18 +40,15 @@ void print_working_dir();
 void print_info();
 
 typedef struct interncmd_st {
-  char* name;
-  void (*fkt)(int argc, char** argv);
+    char* name;
+    void (*fkt)(int argc, char** argv);
 } interncmd_t;
 
 interncmd_t interncmds[MAXINTERN] = {
     {"818-ende", beenden},         {"quit", beenden},  {"echo", ausgeben},        {"818-info", print_info},
-    {"818-wo", print_working_dir}, {"cd", change_dir}, {"818-setpath", set_path}, {"818-addtopath", add_to_path}};
+    {"818-wo", print_working_dir}, {"cd", change_dir}, {"818-setpath", set_path}, {"818-addtopath", add_to_path}
+};
 
-int check_background_mode(char** argv) {
-    printf("arg0 %s",argv);
-    return !strncmp((*argv), "&",1);
-}
 
 void *wait_for_child(void *data) {
     pid_t child_pid = *((pid_t *)data); // My argument is a PID
@@ -89,304 +86,306 @@ void detach_waiting(pid_t pid) {
     pthread_detach(thread);
 }
 
-int main(int argc, char** argv){
-  char* cmdline;
-  size_t cmdlen = 0;
-  char* cmdv[MAXCMDS];
-  int anzcmds = 0;
-  int pid;
-  int internIdx;
-  int fd0save;
+int main(int argc, char** argv) {
+    char* cmdline;
+    size_t cmdlen = 0;
+    char* cmdv[MAXCMDS];
+    int anzcmds = 0;
+    int pid;
+    int internIdx;
+    int fd0save;
 
-/*
-  if (argc <= 2) {
-      if (strcmp(argv[1], "--nosuid") == 0) {
-          if(geteuid() != 0){
+    /*
+      if (argc <= 2) {
+          if (strcmp(argv[1], "--nosuid") == 0) {
+              if(geteuid() != 0){
 
-          }
-     }
-   }
-*/
-  for (;;) {
-    print_promt();
-    cmdlen = getline(&cmdline, &cmdlen, stdin);
-    parse_cmds(cmdv, cmdline, &anzcmds);
+              }
+         }
+       }
+    */
+    for (;;) {
+        print_promt();
+        cmdlen = getline(&cmdline, &cmdlen, stdin);
+        parse_cmds(cmdv, cmdline, &anzcmds);
 
-    if(anzcmds == 1 && !strncmp((cmdv[0]), "\n",1)){
+        if(anzcmds == 1 && !strncmp((cmdv[0]), "\n",1)) {
 #ifdef DEBUG_PRINT
-        printf("skip execution - no cmd, just newline'\n");
+            printf("skip execution - no cmd, just newline'\n");
 #endif
-        continue;
-    }
-
-#ifdef DEBUG_PRINT
-    print_vec(cmdv, anzcmds);
-#endif
-    int run_detached = !strncmp((cmdv[0]), "&",1);
-    if(run_detached){
-        (*cmdv)++;  // Move past the & argument
-    }
-
+            continue;
+        }
 
 #ifdef DEBUG_PRINT
-    printf("detached mode: %d\n", run_detached);
-    print_vec(cmdv, anzcmds);
+        print_vec(cmdv, anzcmds);
 #endif
-    internIdx = getInternIdx(cmdv[anzcmds - 1]);
-    if (internIdx == -1) {
-      switch (pid = fork()) {
-        case -1:
-          perror("fork");
-          break;
-        case 0:
-          //child
-          execute(cmdv, anzcmds, 0);
-          break;
-        default:
-            //parent
-          if (run_detached) {
-              detach_waiting(pid);
-              break;
-          } else {
-            int status = 0;
+        int run_detached = !strncmp((cmdv[0]), "&",1);
+        if(run_detached) {
+            (*cmdv)++;  // Move past the & argument
+        }
+
 
 #ifdef DEBUG_PRINT
-            printf("wait for child with pid %d\n", pid);
+        printf("detached mode: %d\n", run_detached);
+        print_vec(cmdv, anzcmds);
 #endif
-            pid_t w = waitpid(pid, &status, 0);
-            if (w == -1) {
-              perror("waitpid");
-              exit(1);
+        internIdx = getInternIdx(cmdv[anzcmds - 1]);
+        if (internIdx == -1) {
+            switch (pid = fork()) {
+            case -1:
+                perror("fork");
+                break;
+            case 0:
+                //child
+                execute(cmdv, anzcmds, 0);
+                break;
+            default:
+                //parent
+                if (run_detached) {
+                    detach_waiting(pid);
+                    break;
+                } else {
+                    int status = 0;
+
+#ifdef DEBUG_PRINT
+                    printf("wait for child with pid %d\n", pid);
+#endif
+                    pid_t w = waitpid(pid, &status, 0);
+                    if (w == -1) {
+                        perror("waitpid");
+                        exit(1);
+                    }
+                    if (WIFEXITED(status)) {
+                        printf("exited, status=%d\n", WEXITSTATUS(status));
+                    } else if (WIFSIGNALED(status)) {
+                        printf("killed by signal %d\n", WTERMSIG(status));
+                    } else if (WIFSTOPPED(status)) {
+                        printf("stopped by signal %d\n", WSTOPSIG(status));
+                    } else  {
+                        printf("returned exit code %d\n", status);
+                    }
+                    break;
+                }
             }
-            if (WIFEXITED(status)) {
-              printf("exited, status=%d\n", WEXITSTATUS(status));
-            } else if (WIFSIGNALED(status)) {
-              printf("killed by signal %d\n", WTERMSIG(status));
-            } else if (WIFSTOPPED(status)) {
-              printf("stopped by signal %d\n", WSTOPSIG(status));
-            } else  {
-              printf("returned exit code %d\n", status);
-            }
-            break;
-          }
-      }
-    } else {
-      fd0save = dup(0);
-      execute(cmdv, anzcmds, 1);
-      fclose(stdin);
-      dup2(fd0save, 0);
-      close(fd0save);
-      stdin = fdopen(0, "r");
+        } else {
+            fd0save = dup(0);
+            execute(cmdv, anzcmds, 1);
+            fclose(stdin);
+            dup2(fd0save, 0);
+            close(fd0save);
+            stdin = fdopen(0, "r");
+        }
     }
-  }
-  free(cmdline);
-  return 0;
+    free(cmdline);
+    return 0;
 }
 
 void execute(char** cmdv, int anz, int letztes) {
-  char* words[MAXWORDS];
-  int anzworte;
-  int pd[2];
-  int pid;
-  int internNr;
+    char* words[MAXWORDS];
+    int anzworte;
+    int pd[2];
+    int pid;
+    int internNr;
 
-  if (anz > 1) {  // dann gibts eine pipe
+    if (anz > 1) {  // dann gibts eine pipe
 
-    if (pipe(pd) == -1) {
-      perror("Pipe");
-      exit(2);
+        if (pipe(pd) == -1) {
+            perror("Pipe");
+            exit(2);
+        }
+
+        switch (pid = fork()) {
+        case -1:
+            perror("fork");
+            break;
+        case 0:
+            // child
+            fclose(stdout);
+            dup2(pd[1], 1);           // überschreibt stdout FD mit der schreibseite der pipe
+            stdout = fdopen(1, "w");  // wegen interer cmds auch die stdio clib
+            close(pd[0]);             // schlieẞen was wir nicht brauchen
+            close(pd[1]);
+            execute(cmdv, anz - 1, 0);
+            break;
+        default:
+            //parent
+            fclose(stdin);
+            dup2(pd[0], 0);          // überschreibt stdout FD mit der leseseite der pipe
+            stdin = fdopen(0, "r");  // wegen interer cmds auch die stdio clib
+            close(pd[0]);            // schließen was wir nicht brauchen
+            close(pd[1]);            // ohne schließen kein EOF
+            break;
+        }
     }
-
-    switch (pid = fork()) {
-      case -1:
-        perror("fork");
-        break;
-      case 0:
-        // child
-        fclose(stdout);
-        dup2(pd[1], 1);           // überschreibt stdout FD mit der schreibseite der pipe
-        stdout = fdopen(1, "w");  // wegen interer cmds auch die stdio clib
-        close(pd[0]);             // schlieẞen was wir nicht brauchen
-        close(pd[1]);
-        execute(cmdv, anz - 1, 0);
-        break;
-      default:
-        //parent
-        fclose(stdin);
-        dup2(pd[0], 0);          // überschreibt stdout FD mit der leseseite der pipe
-        stdin = fdopen(0, "r");  // wegen interer cmds auch die stdio clib
-        close(pd[0]);            // schließen was wir nicht brauchen
-        close(pd[1]);            // ohne schließen kein EOF
-        break;
-    }
-  }
-  parse_words(words, cmdv[anz - 1], &anzworte);
+    parse_words(words, cmdv[anz - 1], &anzworte);
 #ifdef DEBUG_PRINT
-  print_vec(words, anzworte);
+    print_vec(words, anzworte);
 #endif
-  internNr = getInternIdx(cmdv[anz - 1]);
-  if (internNr == -1) {
-    execvp(words[0], words);
-    perror("exec");
-    exit(3);
-  } else {
-    interncmds[internNr].fkt(anzworte, words);
-    if (!letztes) {
-      exit(0);
+    internNr = getInternIdx(cmdv[anz - 1]);
+    if (internNr == -1) {
+        execvp(words[0], words);
+        perror("exec");
+        exit(3);
+    } else {
+        interncmds[internNr].fkt(anzworte, words);
+        if (!letztes) {
+            exit(0);
+        }
     }
-  }
 }
 
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds) {
-  for (*anzcmds = 0, cmdv[0] = strtok(cmdline, "|"); *anzcmds < MAXCMDS - 1 && cmdv[*anzcmds] != NULL;
-       ++*anzcmds, cmdv[*anzcmds] = strtok(NULL, "|"))
-    ;
+    for (*anzcmds = 0, cmdv[0] = strtok(cmdline, "|"); *anzcmds < MAXCMDS - 1 && cmdv[*anzcmds] != NULL;
+            ++*anzcmds, cmdv[*anzcmds] = strtok(NULL, "|"))
+        ;
 }
 
 void parse_words(char** wordv, char* cmdline, int* anzwords) {
-  for (*anzwords = 0, wordv[0] = strtok(cmdline, " \t\n"); *anzwords < MAXWORDS - 1 && wordv[*anzwords] != NULL;
-       ++*anzwords, wordv[*anzwords] = strtok(NULL, " \t\n"))
-    ;
+    for (*anzwords = 0, wordv[0] = strtok(cmdline, " \t\n"); *anzwords < MAXWORDS - 1 && wordv[*anzwords] != NULL;
+            ++*anzwords, wordv[*anzwords] = strtok(NULL, " \t\n"))
+        ;
 }
 
 int getInternIdx(char* cmdline) {
-  char* pos;
-  size_t sz;
-  while (isspace(*cmdline)) {
-    ++cmdline;
-  }
-
-  for (int i = 0; i < MAXINTERN; ++i) {
-    pos = strpbrk(cmdline, " \t");
-    sz = pos ? (pos - cmdline) : strlen(interncmds[i].name);
-    if (strncmp(cmdline, interncmds[i].name, sz) == 0) {
-      return i;
+    char* pos;
+    size_t sz;
+    while (isspace(*cmdline)) {
+        ++cmdline;
     }
-  }
-  return -1;
+
+    for (int i = 0; i < MAXINTERN; ++i) {
+        pos = strpbrk(cmdline, " \t");
+        sz = pos ? (pos - cmdline) : strlen(interncmds[i].name);
+        if (strncmp(cmdline, interncmds[i].name, sz) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 char* get_working_dir() {
-  char dir_name[MAX_DIR_NAME_LEN];
-  if (getcwd(dir_name, sizeof(dir_name)) == NULL) {
-    perror("getcwd");
-    exit(1);
-  }
+    char dir_name[MAX_DIR_NAME_LEN];
+    if (getcwd(dir_name, sizeof(dir_name)) == NULL) {
+        perror("getcwd");
+        exit(1);
+    }
 #ifdef DEBUG_PRINT
-  printf("current working dir: %s\n", dir_name);
+    printf("current working dir: %s\n", dir_name);
 #endif
-  return strdup(dir_name);
+    return strdup(dir_name);
 }
 
 void beenden(int argc, char** argv) {
-  printf("Thx for using - donate here!\n");
-  exit(argc > 1 ? atoi(argv[1]) : 0);
+    printf("Thx for using - donate here!\n");
+    exit(argc > 1 ? atoi(argv[1]) : 0);
 }
 
 void ausgeben(int argc, char** argv) {
-  while (--argc) {
-    printf("%s ", *++argv);
-  }
-  putchar('\n');
- }
+    while (--argc) {
+        printf("%s ", *++argv);
+    }
+    putchar('\n');
+}
 
 void print_info() {
-  printf("Process information:\n");
+    printf("Process information:\n");
 
-  // https://www.man7.org/linux/man-pages/man3/getumask.3.html
-  // get umask by setting new one and set it back
-  mode_t mask = umask(0);
-  umask(mask);
+    // https://www.man7.org/linux/man-pages/man3/getumask.3.html
+    // get umask by setting new one and set it back
+    mode_t mask = umask(0);
+    umask(mask);
 
-  printf("pid=%d, ppid=%d, uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getpid(), getppid(), getuid(), geteuid(),
-         getgid(), getegid(), mask);
+    printf("pid=%d, ppid=%d, uid=%d, euid=%d, gid=%d, egid=%d, umask=%d\n\n", getpid(), getppid(), getuid(), geteuid(),
+           getgid(), getegid(), mask);
 
-  printf("working dir: %s\n\n", get_working_dir());
+    printf("working dir: %s\n\n", get_working_dir());
 
-  printf("# Signalhandler:\n");
-  for (int signo = 1; signo <= 31; signo++) {
-    struct sigaction sa;
-    sigaction(signo, NULL, &sa);
-    printf("signal %d - handler: %p, sigaction: %p, mask: %p, flags: %d\n", signo, sa.sa_handler, sa.sa_sigaction,
-           sa.sa_mask, sa.sa_flags);
-  }
+    printf("# Signalhandler:\n");
+    for (int signo = 1; signo <= 31; signo++) {
+        struct sigaction sa;
+        sigaction(signo, NULL, &sa);
+        printf("signal %d - handler: %p, sigaction: %p, mask: %p, flags: %d\n", signo, sa.sa_handler, sa.sa_sigaction,
+               sa.sa_mask, sa.sa_flags);
+    }
 
-  printf("\n# environment:\n");
-  char** env = environ;
-  while (*env != NULL) {
-    printf("  %s\n", *env);
-    env++;
-  }
+    printf("\n# environment:\n");
+    char** env = environ;
+    while (*env != NULL) {
+        printf("  %s\n", *env);
+        env++;
+    }
 }
 
 void change_dir(int argc, char** argv) {
 #ifdef DEBUG_PRINT
-  printf("in change_dir, argc: %d\n", argc);
+    printf("in change_dir, argc: %d\n", argc);
 #endif
-  if (argc > 1) {
-    if (chdir((const char*)argv[1]) == -1) {
-      perror("chdir");
-    }
-  } else {
-    const char* home_dir = getenv("HOME");
+    if (argc > 1) {
+        if (chdir((const char*)argv[1]) == -1) {
+            perror("chdir");
+        }
+    } else {
+        const char* home_dir = getenv("HOME");
 #ifdef DEBUG_PRINT
-    printf("home_dir: %s\n", home_dir);
+        printf("home_dir: %s\n", home_dir);
 #endif
-    if (home_dir == NULL) {
-      perror("getenv(HOME)");
-      return;
+        if (home_dir == NULL) {
+            perror("getenv(HOME)");
+            return;
+        }
+        if (chdir(home_dir) == -1) {
+            perror("chdir");
+        }
     }
-    if (chdir(home_dir) == -1) {
-      perror("chdir");
-    }
-  }
 }
 
 void set_path(int argc, char** argv) {
-  const int override = 1;
-  if (argc > 1) {
-    if (setenv("PATH", argv[1], override) == -1) {
-      perror("setenv");
+    const int override = 1;
+    if (argc > 1) {
+        if (setenv("PATH", argv[1], override) == -1) {
+            perror("setenv");
+        }
     }
-  }
 }
 
 void add_to_path(int argc, char** argv) {
-  if (argc > 1) {
-    char* path = getenv("PATH");
-    char* extension_sign = ":";
+    if (argc > 1) {
+        char* path = getenv("PATH");
+        char* extension_sign = ":";
 
-    int extended_path_len = strlen(path) + strlen(extension_sign) + strlen(argv[1]) + 1;  //+1 for terminator
-    char extended_path[extended_path_len];
-    // store the "new" path (including given argument)
-    snprintf(extended_path, extended_path_len, "%s%s%s", path, extension_sign, argv[1]);
+        int extended_path_len = strlen(path) + strlen(extension_sign) + strlen(argv[1]) + 1;  //+1 for terminator
+        char extended_path[extended_path_len];
+        // store the "new" path (including given argument)
+        snprintf(extended_path, extended_path_len, "%s%s%s", path, extension_sign, argv[1]);
 
 #ifdef DEBUG_PRINT
-    printf("path_len=%d\n", extended_path_len);
-    printf("path='%s'\n", path);
-    printf("extended_path='%s'\n", extended_path);
+        printf("path_len=%d\n", extended_path_len);
+        printf("path='%s'\n", path);
+        printf("extended_path='%s'\n", extended_path);
 #endif
-    const int override = 1;
+        const int override = 1;
 
-    if (setenv("PATH", extended_path, override) == -1) {
-      perror("setenv");
+        if (setenv("PATH", extended_path, override) == -1) {
+            perror("setenv");
+        }
     }
-  }
 }
 
 void print_promt() {
-  if (geteuid() != 0) {
-    printf("%s-%s > ", MAT_NUM, get_working_dir());
-  } else {
-    printf("%s-%s >> ", MAT_NUM, get_working_dir());
-  }
-  fflush(stdout);
+    if (geteuid() != 0) {
+        printf("%s-%s > ", MAT_NUM, get_working_dir());
+    } else {
+        printf("%s-%s >> ", MAT_NUM, get_working_dir());
+    }
+    fflush(stdout);
 }
 
-void print_working_dir() { printf("%s\n", get_working_dir()); }
+void print_working_dir() {
+    printf("%s\n", get_working_dir());
+}
 
 void print_vec(char** v, int anz) {
-  for (int i = 0; i < anz; ++i) {
-    printf("%d: %s\n", i, v[i]);
-  }
+    for (int i = 0; i < anz; ++i) {
+        printf("%d: %s\n", i, v[i]);
+    }
 }
