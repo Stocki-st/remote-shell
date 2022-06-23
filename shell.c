@@ -13,7 +13,7 @@
 
 #define MAXWORDS 200
 #define MAXCMDS 200
-#define MAXINTERN 8
+#define MAXINTERN 12
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/ "818"
@@ -39,14 +39,30 @@ void print_promt();
 void print_working_dir();
 void print_info();
 
+void get_path() {
+}
+
+void print_help() {
+}
+
 typedef struct interncmd_st {
     char* name;
     void (*fkt)(int argc, char** argv);
 } interncmd_t;
 
 interncmd_t interncmds[MAXINTERN] = {
-    {"818-ende", beenden},         {"quit", beenden},  {"echo", ausgeben},        {"818-info", print_info},
-    {"818-wo", print_working_dir}, {"cd", change_dir}, {"818-setpath", set_path}, {"818-addtopath", add_to_path}
+    {"818-ende", beenden},
+    {"quit", beenden},
+    {"echo", ausgeben}, 
+    {"818-echo", ausgeben},
+    {"818-info", print_info},
+    {"818-wo", print_working_dir}, 
+    {"cd", change_dir}, 
+    {"818-cd", change_dir}, 
+    {"818-setpath", set_path}, 
+    {"818-addtopath", add_to_path},
+    {"818-getpath", get_path}, 
+    {"818-help", print_help}, 
 };
 
 
@@ -86,6 +102,31 @@ void detach_waiting(pid_t pid) {
     pthread_detach(thread);
 }
 
+void print_stat(char* name){
+ struct stat fileStat;
+    if(stat(name, &fileStat) < 0)    
+        return 1;
+
+    printf("Information for %s\n", name);
+    printf("---------------------------\n");
+    printf("File Size: \t\t%d bytes\n", fileStat.st_size);
+    printf("Number of Links: \t%d\n", fileStat.st_nlink);
+    printf("File inode: \t\t%d\n", fileStat.st_ino);
+
+    printf("File Permissions: \t");
+    printf( (S_ISDIR(fileStat.st_mode)) ? "d" : "-");
+    printf( (fileStat.st_mode & S_IRUSR) ? "r" : "-");
+    printf( (fileStat.st_mode & S_IWUSR) ? "w" : "-");
+    printf( (fileStat.st_mode & S_IXUSR) ? "x" : "-");
+    printf( (fileStat.st_mode & S_IRGRP) ? "r" : "-");
+    printf( (fileStat.st_mode & S_IWGRP) ? "w" : "-");
+    printf( (fileStat.st_mode & S_IXGRP) ? "x" : "-");
+    printf( (fileStat.st_mode & S_IROTH) ? "r" : "-");
+    printf( (fileStat.st_mode & S_IWOTH) ? "w" : "-");
+    printf( (fileStat.st_mode & S_IXOTH) ? "x" : "-");
+    printf("\n\n");   
+}
+
 int main(int argc, char** argv) {
     char* cmdline;
     size_t cmdlen = 0;
@@ -94,23 +135,44 @@ int main(int argc, char** argv) {
     int pid;
     int internIdx;
     int fd0save;
+    int nosuid = 0;
     
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
 
 
-    /*
-      if (argc <= 2) {
+    if (argc >= 2) {
           if (strcmp(argv[1], "--nosuid") == 0) {
+              printf("[mode: '--nosuid' ]\n");
+              nosuid = 1;
+              print_stat(argv[0]);
               if(geteuid() != 0){
-
+                  /*needed? i check die angabe ned ganz :D
+                   * if (seteuid(0) < 0) {
+                     perror("seteuid");
+                     exit(1);
+                   */
+                  
+           }
               }
          }
-       }
-    */
+       
+
+       
     for (;;) {
+        if(nosuid){
+            printf("[noSUID] ");
+        } 
         print_promt();
+             
         cmdlen = getline(&cmdline, &cmdlen, stdin);
+        
+        if(cmdlen == -1){
+           //avoid endless circle of death :O
+           printf("\n'ctrl' + 'D' entered - exit\n");
+           break;
+        }
+        
         parse_cmds(cmdv, cmdline, &anzcmds);
 
         // check if cmd is more than just an enter stroke
@@ -143,10 +205,11 @@ int main(int argc, char** argv) {
             case 0:
                 //child
                 if (!run_detached) {
-                // set default signal handling, when running in foreground
-                // else sig ignore is inherited from parent
-                signal(SIGINT, SIG_DFL);
-                signal(SIGQUIT, SIG_DFL);
+                    // set default signal handling, when running in foreground
+                    // else sig ignore is inherited from parent
+                    signal(SIGINT, SIG_DFL);
+                    signal(SIGQUIT, SIG_DFL);
+                }
                 execute(cmdv, anzcmds, 0);
                 exit(0);
             default:
