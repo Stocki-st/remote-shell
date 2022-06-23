@@ -1,3 +1,7 @@
+##############################
+# SHELL                      #
+# Author: Stefan Stockinger  #
+#############################
 all: shell
 
 shell: shell.c 
