@@ -20,30 +20,36 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
-
 #define MAXWORDS 25
 #define MAXCMDS 200
 #define MAXINTERNCMDS 13
 #define MAXPATHS 30
-
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/ "818"
+
+
 //#define DEBUG_PRINT
 
 extern char** environ;
 
+/*
+ * helpers for splitting 
+ */
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds);
 void parse_words(char** wordv, char* cmdline, int* anzwords);
 void parse_path(char** pathv, char* allpaths, int* anzpaths);
+
+
+/*
+ * internal shell functions and helpers
+ */
 void execute(char** v, int anz, int letztes);
 int get_intern_cmd_idx(char* cmdline);
-void print_vec(char** v, int anz);
 char* get_working_dir();
+int get_suid_bit(char* name);
 void print_promt();
 void print_stat(char* name);
-void print_help();
-int get_suid_bit(char* name);
-
+void print_vec(char** v, int anz);
 
 /*
  * internal cmds
@@ -58,6 +64,10 @@ void print_info();
 void get_path();
 void print_help();
 
+
+/*
+ * waiter for background execution
+ */
 void detach_waiting(pid_t pid);
 void *wait_for_child(void *data);
 
@@ -335,17 +345,17 @@ void parse_cmds(char** cmdv, char* cmdline, int* anzcmds) {
         ;
 }
 
-// splits a string into single paths (delimiter: ":")
-void parse_path(char** pathv, char* allpaths, int* anzpaths) {
-    for (*anzpaths = 0, pathv[0] = strtok(allpaths, ":"); *anzpaths < MAXPATHS - 1 && pathv[*anzpaths] != NULL;
-            ++*anzpaths, pathv[*anzpaths] = strtok(NULL, ":"))
-        ;
-}
-
 // splits a string into single words (delimiters: space, tab, newline)
 void parse_words(char** wordv, char* cmdline, int* anzwords) {
     for (*anzwords = 0, wordv[0] = strtok(cmdline, " \t\n"); *anzwords < MAXWORDS - 1 && wordv[*anzwords] != NULL;
             ++*anzwords, wordv[*anzwords] = strtok(NULL, " \t\n"))
+        ;
+}
+
+// splits a string into single paths (delimiter: ":")
+void parse_path(char** pathv, char* allpaths, int* anzpaths) {
+    for (*anzpaths = 0, pathv[0] = strtok(allpaths, ":"); *anzpaths < MAXPATHS - 1 && pathv[*anzpaths] != NULL;
+            ++*anzpaths, pathv[*anzpaths] = strtok(NULL, ":"))
         ;
 }
 
@@ -595,6 +605,7 @@ void print_working_dir() {
     printf("%s\n", get_working_dir());
 }
 
+// print some help
 void print_help() {
     printf("############################\n");
     printf("### Welcome to my shell! ###\n");
