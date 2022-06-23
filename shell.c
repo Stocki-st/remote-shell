@@ -94,6 +94,10 @@ int main(int argc, char** argv) {
     int pid;
     int internIdx;
     int fd0save;
+    
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+
 
     /*
       if (argc <= 2) {
@@ -109,6 +113,7 @@ int main(int argc, char** argv) {
         cmdlen = getline(&cmdline, &cmdlen, stdin);
         parse_cmds(cmdv, cmdline, &anzcmds);
 
+        // check if cmd is more than just an enter stroke
         if(anzcmds == 1 && !strncmp((cmdv[0]), "\n",1)) {
 #ifdef DEBUG_PRINT
             printf("skip execution - no cmd, just newline'\n");
@@ -137,8 +142,13 @@ int main(int argc, char** argv) {
                 break;
             case 0:
                 //child
+                if (!run_detached) {
+                // set default signal handling, when running in foreground
+                // else sig ignore is inherited from parent
+                signal(SIGINT, SIG_DFL);
+                signal(SIGQUIT, SIG_DFL);
                 execute(cmdv, anzcmds, 0);
-                break;
+                exit(0);
             default:
                 //parent
                 if (run_detached) {
