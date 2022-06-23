@@ -1,3 +1,10 @@
+/*
+ * @filename:    shell.c
+ * @author:      Stefan Stockinger 
+ * @date:        2022-06-18
+ * @description: One said, that every real man needs to delevop his own shell --> this in mine
+*/
+
 #include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
@@ -6,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/utsname.h>  //uname
+#include <sys/capability.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <wait.h>
@@ -86,6 +94,25 @@ int main(int argc, char** argv) {
             printf("[mode: '--nosuid' ]\n");
             nosuid = 1;
             print_stat(argv[0]);
+            
+            cap_t caps = cap_get_proc();
+            
+            if(!caps){
+                perror("cap_get_proc");
+                exit(1);
+            }
+            for(int i = 0; i <= CAP_LAST_CAP; ++i){
+                cap_flag_value_t cap_perm;
+                cap_flag_value_t cap_eff;
+                cap_flag_value_t cap_inherit;
+                
+                cap_get_flag(caps,i, CAP_PERMITTED, &cap_perm);
+                cap_get_flag(caps,i, CAP_EFFECTIVE, &cap_eff);
+                cap_get_flag(caps,i, CAP_INHERITABLE, &cap_inherit);
+                
+                printf("CAP '%s': permitted: %d, effective: %d, inheritable: %d\n", cap_to_name(i),
+                       (cap_perm == CAP_SET), (cap_eff== CAP_SET), (cap_inherit== CAP_SET));
+            }
             if(geteuid() != 0) {
                 /*needed? i check die angabe ned ganz :D
                  * if (seteuid(0) < 0) {
@@ -93,7 +120,9 @@ int main(int argc, char** argv) {
                    exit(1);
   
                 */
-            }
+                }
+                cap_free(caps);
+            
         }
     }
 
