@@ -1,6 +1,6 @@
 /*
  * @filename:    shell.c
- * @author:      Stefan Stockinger 
+ * @author:      Stefan Stockinger
  * @date:        2022-06-18
  * @description: One said, that every real man needs to delevop his own shell --> this in mine
 */
@@ -18,10 +18,13 @@
 #include <fcntl.h>
 #include <wait.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
-#define MAXWORDS 200
+
+#define MAXWORDS 25
 #define MAXCMDS 200
 #define MAXINTERN 11
+#define MAXPATHS 30
 
 #define MAX_DIR_NAME_LEN 1024
 #define MAT_NUM /*is211*/ "818"
@@ -31,13 +34,14 @@ extern char** environ;
 
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds);
 void parse_words(char** wordv, char* cmdline, int* anzwords);
+void parse_path(char** pathv, char* allpaths, int* anzpaths);
 void execute(char** v, int anz, int letztes);
 int get_intern_cmd_idx(char* cmdline);
 void print_vec(char** v, int anz);
 char* get_working_dir();
 void print_promt();
 void print_stat(char* name);
-
+int get_set_uid_bit(char* name);
 /*
  * internal cmds
  */
@@ -70,10 +74,12 @@ interncmd_t interncmds[MAXINTERN] = {
     {"818-cd", change_dir},
     {"818-setpath", set_path},
     {"818-addtopath", add_to_path},
-    {"818-getpath", get_path}};
+    {"818-getpath", get_path}
+};
 
-    
-    
+atomic_int nosuid = 0;
+
+
 int main(int argc, char** argv) {
     char* cmdline;
     size_t cmdlen = 0;
@@ -82,68 +88,59 @@ int main(int argc, char** argv) {
     int pid;
     int internIdx;
     int fd0save;
-    int nosuid = 0;
 
     // ignore SIGINT and SIGQUIT
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
 
-
     if (argc >= 2) {
         if (strcmp(argv[1], "--nosuid") == 0) {
-            printf("[mode: '--nosuid' ]\n");
-            nosuid = 1;
-            print_stat(argv[0]);
-            
-            cap_t caps = cap_get_proc();
-            
-            if(!caps){
-                perror("cap_get_proc");
-                exit(1);
-            }
-            for(int i = 0; i <= CAP_LAST_CAP; ++i){
-                cap_flag_value_t cap_perm;
-                cap_flag_value_t cap_eff;
-                cap_flag_value_t cap_inherit;
-                
-                cap_get_flag(caps,i, CAP_PERMITTED, &cap_perm);
-                cap_get_flag(caps,i, CAP_EFFECTIVE, &cap_eff);
-                cap_get_flag(caps,i, CAP_INHERITABLE, &cap_inherit);
-                
-                printf("CAP '%s': permitted: %d, effective: %d, inheritable: %d\n", cap_to_name(i),
-                       cap_perm, cap_eff, cap_inherit);
-            }
-            if(geteuid() != 0) {
-                /*needed? i check die angabe ned ganz :D
-                 * if (seteuid(0) < 0) {
-                   perror("seteuid");
-                   exit(1);
-  
-                */
+            uid_t euid = geteuid();
+
+            if(euid!= 0) {
+                nosuid = 1;
+                printf("[mode: '--nosuid' ] - euid = %d\n",euid);
+                print_stat(argv[0]);
+                cap_t caps = cap_get_proc();
+
+                if(!caps) {
+                    perror("cap_get_proc");
+                    cap_free(caps);
+                    exit(1);
+                }
+                printf("[CAPABILITIES]\n\n");
+                for(int i = 0; i <= CAP_LAST_CAP; ++i) {
+                    cap_flag_value_t cap_perm;
+                    cap_flag_value_t cap_eff;
+                    cap_flag_value_t cap_inherit;
+
+                    cap_get_flag(caps,i, CAP_PERMITTED, &cap_perm);
+                    cap_get_flag(caps,i, CAP_EFFECTIVE, &cap_eff);
+                    cap_get_flag(caps,i, CAP_INHERITABLE, &cap_inherit);
+
+                    if(cap_perm | cap_eff | cap_inherit) {
+                        printf("CAP '%s': permitted: %d, effective: %d, inheritable: %d\n", cap_to_name(i),
+                               cap_perm, cap_eff, cap_inherit);
+                    }
                 }
                 cap_free(caps);
-            
+            }else{
+                 printf("'--nosuid' is ignored, because euid = %d\n",euid);
+            }
         }
     }
-
-
-
     for (;;) {
         if(nosuid) {
             printf("[noSUID] ");
         }
         print_promt();
-
         cmdlen = getline(&cmdline, &cmdlen, stdin);
-
         if(cmdlen == -1) {
             //avoid endless circle of death :O
             printf("\n'ctrl' + 'D' entered - exit\n");
             break;
         }
-
         parse_cmds(cmdv, cmdline, &anzcmds);
-
         // check if cmd is more than just an enter stroke
         if(anzcmds == 1 && !strncmp((cmdv[0]), "\n",1)) {
 #ifdef DEBUG_PRINT
@@ -265,6 +262,48 @@ void execute(char** cmdv, int anz, int letztes) {
 #endif
     internNr = get_intern_cmd_idx(cmdv[anz - 1]);
     if (internNr == -1) {
+        if(nosuid) {
+            int path_found = 0;
+            // try if file is in working dir
+            char *path = realpath((const char*) words[0], NULL);
+            if(path == NULL) {
+                char file[MAX_DIR_NAME_LEN];
+                //file not found, try searching in PATH(s)
+                // get absolute path of cmd
+                char* paths[MAXPATHS];
+                int num_of_paths;
+                //extract paths from PATH env
+                parse_path(paths,getenv("PATH"),&num_of_paths);
+                for(int i = 0; i<num_of_paths; ++i) {
+                    //generate filepaths an get full path with realpath (and check if exists)
+                    snprintf(file,MAX_DIR_NAME_LEN,"%s/%s", paths[i],words[0]);
+                    path = realpath(file, NULL);
+                    if(path == NULL) {
+                        continue;
+                    } else {
+                        path_found = 1;
+                        break;
+                    }
+                }
+            } else {
+                path_found = 1;
+            }
+            if(path_found) {
+#ifdef DEBUG_PRINT
+                printf("path[%s]\n", path);
+#endif
+                int suid = get_set_uid_bit(path);
+                if(suid) {
+                    printf("--nosuid mode--> cmd has suid bit set! - I'm sorry, will not execute! \n");
+                    free(path);
+                    exit(1);
+                }
+#ifdef DEBUG_PRINT
+                printf("suid of %s is %d\n", path, suid);
+#endif                
+                free(path);
+            }
+        }
         execvp(words[0], words);
         perror("exec");
         exit(3);
@@ -279,6 +318,12 @@ void execute(char** cmdv, int anz, int letztes) {
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds) {
     for (*anzcmds = 0, cmdv[0] = strtok(cmdline, "|"); *anzcmds < MAXCMDS - 1 && cmdv[*anzcmds] != NULL;
             ++*anzcmds, cmdv[*anzcmds] = strtok(NULL, "|"))
+        ;
+}
+
+void parse_path(char** pathv, char* allpaths, int* anzpaths) {
+    for (*anzpaths = 0, pathv[0] = strtok(allpaths, ":"); *anzpaths < MAXPATHS - 1 && pathv[*anzpaths] != NULL;
+            ++*anzpaths, pathv[*anzpaths] = strtok(NULL, ":"))
         ;
 }
 
@@ -304,7 +349,6 @@ int get_intern_cmd_idx(char* cmdline) {
     }
     return -1;
 }
-
 
 void print_promt() {
     if (geteuid() != 0) {
@@ -391,6 +435,15 @@ void print_stat(char* name) {
     printf("\n\n");
 }
 
+int get_set_uid_bit(char* name) {
+    struct stat file_stat;
+    if(stat(name, &file_stat) < 0) {
+        perror(name);
+        return -1;
+    }
+    return file_stat.st_mode & S_ISUID;
+}
+
 void print_vec(char** v, int anz) {
     for (int i = 0; i < anz; ++i) {
         printf("%d: %s\n", i, v[i]);
@@ -434,7 +487,7 @@ void print_info() {
         printf("signal %d - handler: %p, sigaction: %p, mask: %p, flags: %d\n", signo, sa.sa_handler, sa.sa_sigaction,
                sa.sa_mask, sa.sa_flags);
     }
-    
+
     printf("\n# environment:\n");
     char** env = environ;
     while (*env != NULL) {
