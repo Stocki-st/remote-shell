@@ -8,4 +8,6 @@
 #pragma once
 
 
+// make shell public
+// this functions starts the shell and redirects stdio to client_fd
 int shell(int argc, char** argv, int client_fd);

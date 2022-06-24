@@ -101,6 +101,7 @@ interncmd_t interncmds[MAXINTERNCMDS] = {
 
 atomic_int nosuid_mode = 0;
 
+// this is a bit dirty hack to decide via define if shell should be built standalone or for socket usage
 #ifdef TCP_SHELL_SERVER
 int shell(int argc, char** argv, int client_fd) {
 #else
@@ -120,20 +121,19 @@ int main(int argc, char** argv) {
     signal(SIGQUIT, SIG_IGN);
 
 #ifdef TCP_SHELL_SERVER
-    // Redirect all our standard streams to/from the client socket
+    // when compiled with TCP_SHELL_SERVER, stdin, stdio and stderr will be redirected to the socket (client_fd)
     if(dup2(client_fd, 0 ) < 0) {
-        perror("Could not redirect client FD to stdin");
+        perror("dup2 stdin");
         exit(1);
     }
     if(dup2(client_fd,1) < 0) {
-        perror("Could not redirect client FD to stdout");
+        perror("dup2 stdout");
         exit(1);
     }
     if(dup2(client_fd, 2 ) < 0) {
-        perror("Could not redirect client FD to stderr");
+        perror("dup2 stderr");
         exit(1);
     }
-
 #endif
 
 

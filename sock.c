@@ -1,4 +1,19 @@
-// socket server TCP
+/*
+ * @filename:    sock.c
+ * @author:      Stefan Stockinger
+ * @date:        2022-06-23
+ * @description: creates a socket server which calls the shell
+*/
+
+
+/* # Question: why fork instead of creating a thread? 
+
+Forking is much more convinient for our usecase, as we can easily redirect stdin/out/err 
+this allows us to run the shell standalone and via socket without big changes.
+Furthermore, as an own process, the child has it's own memory, pid, ... in general: ressources, which allows acting independently.
+
+Especially in combination with exec forking is nice, as the child process will be taken over by the exec anyway.
+*/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,12 +30,11 @@
 
 #define PORT 5818
 #define LISTENQ 20
-#define BUFMAX 200
-
 
 int main(int argc, char** argv){
     int print_output = 1;
      if (argc >= 1) {
+         // option "no_output" will suppress logging to stdout and stderr
         if (strcmp(argv[0], "no_output") == 0) {
             print_output = 0;
             fclose(stderr);
@@ -59,7 +73,7 @@ int main(int argc, char** argv){
     }
 
     for(;;) {
-
+        // wait for clients to connect
         clientfd = accept(sockfd,  (struct sockaddr *) &clientaddr, &clientaddrlen);
         if(clientfd == -1) {
             perror("accept");
@@ -69,6 +83,9 @@ int main(int argc, char** argv){
         if(print_output){
             printf("Client connected...\n");
         }
+        
+        // fork for the client
+        
         pid_t clientd_handler = fork();
         if(clientd_handler < 0) {
             perror("fork");

@@ -1,7 +1,7 @@
 ##############################
-# SHELL                      #
+# SHELLSERVER                #
 # Author: Stefan Stockinger  #
-#############################
+##############################
 all: shell shellserver passwd
 
 shellserver: shell.c shell.h sock.c 
