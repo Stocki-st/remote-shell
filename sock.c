@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <string.h>
 
 #include "shell.h"
 
@@ -17,8 +18,13 @@
 #define BUFMAX 200
 
 
-int main() {
-
+int main(int argc, char** argv){
+    int print_output = 1;
+     if (argc >= 2) {
+        if (strcmp(argv[1], "no_output") == 0) {
+            print_output = 0;
+        }
+     }
     int sockfd, clientfd;
     struct sockaddr_in clientaddr, serveraddr;
     socklen_t clientaddrlen;
@@ -55,11 +61,14 @@ int main() {
 
         clientfd = accept(sockfd,  (struct sockaddr *) &clientaddr, &clientaddrlen);
         if(clientfd == -1) {
+        if(print_output){
             perror("accept");
+        }
             exit(3);
         }
-
+        if(print_output){
         printf("Client connected...\n");
+        }
         pid_t clientd_handler = fork();
         if(clientd_handler < 0) {
             perror("fork");
