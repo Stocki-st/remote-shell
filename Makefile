@@ -12,9 +12,7 @@ shell: shell.c
 
 passwd: passwd.c
 	gcc -Wall -o passwd passwd.c
-	
-	chown root ./passwd
-	chmod 4755 ./passwd
+	./install.sh
 	
 clean:
 	rm -f shell shellserver passwd

