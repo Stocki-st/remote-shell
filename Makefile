@@ -4,7 +4,10 @@
 #############################
 all: shell
 
-shell: shell.c 
+shellserver: shell.c shell.h sock.c 
+	gcc -Wall -o shellserver shell.c sock.c -lpthread -lcap -DTCP_SHELL_SERVER
+
+shell: shell.c
 	gcc -Wall -o shell shell.c -lpthread -lcap
 
 clean:

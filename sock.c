@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 
+#include "shell.h"
 
 #define PORT 5818
 #define LISTENQ 20
@@ -45,8 +46,6 @@ int main() {
         exit(1);
     }
 
-
-
     if (listen(sockfd, LISTENQ) == -1) {
         perror("listen");
         exit(EXIT_FAILURE);
@@ -61,20 +60,18 @@ int main() {
         }
 
         printf("Client connected...\n");
-        FILE* fp;
-        char buf[BUFMAX];
-
-        fp = fdopen(clientfd,"w+");
-
-        //handle clients (e.g. with own thread)
-        fprintf(fp, "Hallo du!\n");
-        fflush(fp);
-
-        fgets(buf, BUFMAX,fp);
-        printf("%s",buf);
-        fclose(fp);
+        pid_t clientd_handler = fork();
+        if(clientd_handler < 0) {
+            perror("fork");
+            continue;
+        } else if(!clientd_handler) {
+            shell(0,NULL, clientfd);
+            //handler(client_addr); // Will work on client_fd
+            return 1;
+        } else {
+            // parent does nothing
+            close(clientfd); // fd not needed anymore 
+        }
     }
-
-
     return 0;
 }

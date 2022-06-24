@@ -20,6 +20,10 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
+#ifdef TCP_SHELL_SERVER
+#include "shell.h"
+#endif
+
 #define MAXWORDS 25
 #define MAXCMDS 200
 #define MAXINTERNCMDS 13
@@ -97,9 +101,12 @@ interncmd_t interncmds[MAXINTERNCMDS] = {
 
 atomic_int nosuid_mode = 0;
 
-
+#ifdef TCP_SHELL_SERVER
+int shell(int argc, char** argv, int client_fd) {
+#else
 //the heart of my shell
 int main(int argc, char** argv) {
+#endif
     char* cmdline;
     size_t cmdlen = 0;
     char* cmdv[MAXCMDS];
@@ -111,6 +118,24 @@ int main(int argc, char** argv) {
     // ignore SIGINT and SIGQUIT
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
+
+#ifdef TCP_SHELL_SERVER
+    // Redirect all our standard streams to/from the client socket
+    if(dup2(client_fd, 0 ) < 0) {
+        perror("Could not redirect client FD to stdin");
+        exit(1);
+    }
+    if(dup2(client_fd,1) < 0) {
+        perror("Could not redirect client FD to stdout");
+        exit(1);
+    }
+    if(dup2(client_fd, 2 ) < 0) {
+        perror("Could not redirect client FD to stderr");
+        exit(1);
+    }
+
+#endif
+
 
     if (argc >= 2) {
         if (strcmp(argv[1], "--nosuid") == 0) {
@@ -307,10 +332,10 @@ void parse_cmds(char** cmdv, char* cmdline, int* anzcmds) {
         ;
 }
 
-// splits a string into single words (delimiters: space, tab, newline)
+// splits a string into single words (delimiters: space, tab, newline, carriage return)
 void parse_words(char** wordv, char* cmdline, int* anzwords) {
-    for (*anzwords = 0, wordv[0] = strtok(cmdline, " \t\n"); *anzwords < MAXWORDS - 1 && wordv[*anzwords] != NULL;
-            ++*anzwords, wordv[*anzwords] = strtok(NULL, " \t\n"))
+    for (*anzwords = 0, wordv[0] = strtok(cmdline, " \r\t\n"); *anzwords < MAXWORDS - 1 && wordv[*anzwords] != NULL;
+            ++*anzwords, wordv[*anzwords] = strtok(NULL, " \r\t\n"))
         ;
 }
 
@@ -576,7 +601,7 @@ int check_cmd_suid_in_paths(char* cmd) {
         int num_of_paths;
         //extract paths from PATH env
         parse_path(paths,pathcpy,&num_of_paths);
-  
+
 #ifdef DEBUG_PRINT
         printf("paths:\n");
         print_vec(paths, num_of_paths);
