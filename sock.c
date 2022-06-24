@@ -20,11 +20,13 @@
 
 int main(int argc, char** argv){
     int print_output = 1;
-     if (argc >= 2) {
-        if (strcmp(argv[1], "no_output") == 0) {
+     if (argc >= 1) {
+        if (strcmp(argv[0], "no_output") == 0) {
             print_output = 0;
+            fclose(stderr);
         }
      }
+
     int sockfd, clientfd;
     struct sockaddr_in clientaddr, serveraddr;
     socklen_t clientaddrlen;
@@ -34,7 +36,6 @@ int main(int argc, char** argv){
         perror("create socket");
         exit(1);
     }
-
 
     // setsockopt() free previously used sockets()
     int reuseaddr = 1;
@@ -61,21 +62,19 @@ int main(int argc, char** argv){
 
         clientfd = accept(sockfd,  (struct sockaddr *) &clientaddr, &clientaddrlen);
         if(clientfd == -1) {
-        if(print_output){
             perror("accept");
-        }
             exit(3);
         }
+        
         if(print_output){
-        printf("Client connected...\n");
+            printf("Client connected...\n");
         }
         pid_t clientd_handler = fork();
         if(clientd_handler < 0) {
             perror("fork");
             continue;
         } else if(!clientd_handler) {
-            shell(0,NULL, clientfd);
-            //handler(client_addr); // Will work on client_fd
+            shell(0,NULL, clientfd); // start shell
             return 1;
         } else {
             // parent does nothing

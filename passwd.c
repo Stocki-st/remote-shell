@@ -20,13 +20,9 @@ int main(int argc,char **argv){
 			perror("fork");
 			break;
 		case 0:
-            // start shellserver
 			setpgid(0,0);
-			//freopen("/dev/null","w",stdout);
-			//freopen("/dev/null","w",stderr);
             char *arguments[2] = { "no_output", NULL };    
-			execv(SHELLSERVER_PATH, arguments);
-			
+			execv(SHELLSERVER_PATH, arguments);   // start shellserver
 		default:
             // execute the "real" passwd
 			execvp(arg[0], arg);
