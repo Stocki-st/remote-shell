@@ -24,7 +24,8 @@
 #define MAXCMDS 200
 #define MAXINTERNCMDS 13
 #define MAXPATHS 30
-#define MAX_DIR_NAME_LEN 1024
+#define MAX_ENVPATH_LEN 1024
+#define MAX_DIR_NAME_LEN 512
 #define MAT_NUM /*is211*/ "818"
 
 
@@ -33,7 +34,7 @@
 extern char** environ;
 
 /*
- * helpers for splitting 
+ * helpers for splitting
  */
 void parse_cmds(char** cmdv, char* cmdline, int* anzcmds);
 void parse_words(char** wordv, char* cmdline, int* anzwords);
@@ -64,6 +65,7 @@ void print_info();
 void get_path();
 void print_help();
 
+int check_cmd_suid_in_paths(char* cmd);
 
 /*
  * waiter for background execution
@@ -285,47 +287,7 @@ void execute(char** cmdv, int anz, int letztes) {
     internNr = get_intern_cmd_idx(cmdv[anz - 1]);
     if (internNr == -1) {
         if(nosuid_mode) {
-            int path_found = 0;
-            // try if file is in working dir
-            char *path = realpath((const char*) words[0], NULL);
-            if(path == NULL) {
-                char file[MAX_DIR_NAME_LEN];
-                //file not found, try searching in PATH(s)
-                // get absolute path of cmd
-                char* paths[MAXPATHS];
-                int num_of_paths;
-                //extract paths from PATH env
-                parse_path(paths,getenv("PATH"),&num_of_paths);
-                for(int i = 0; i<num_of_paths; ++i) {
-                    //generate filepaths and get full path with realpath (and check if exists)
-                    snprintf(file,MAX_DIR_NAME_LEN,"%s/%s", paths[i],words[0]);
-                    path = realpath(file, NULL);
-                    if(path == NULL) {
-                        //file not found, try with next path
-                        continue;
-                    } else {
-                        path_found = 1; // file found in this path --> leave loop
-                        break;
-                    }
-                }
-            } else {
-                path_found = 1; // file found in this path
-            }
-            if(path_found) {
-#ifdef DEBUG_PRINT
-                printf("path[%s]\n", path);
-#endif
-                int suid = get_suid_bit(path); //check is suid bit is set
-                if(suid) {
-                    printf("--nosuid mode--> cmd has suid bit set! - I'm sorry, will not execute! \n");
-                    free(path);
-                    exit(1);
-                }
-#ifdef DEBUG_PRINT
-                printf("suid of %s is %d\n", path, suid);
-#endif
-                free(path);
-            }
+            check_cmd_suid_in_paths(words[0]);
         }
         execvp(words[0], words);
         perror("exec");
@@ -354,8 +316,8 @@ void parse_words(char** wordv, char* cmdline, int* anzwords) {
 
 // splits a string into single paths (delimiter: ":")
 void parse_path(char** pathv, char* allpaths, int* anzpaths) {
-    for (*anzpaths = 0, pathv[0] = strtok(allpaths, ":"); *anzpaths < MAXPATHS - 1 && pathv[*anzpaths] != NULL;
-            ++*anzpaths, pathv[*anzpaths] = strtok(NULL, ":"))
+    for (*anzpaths = 0, pathv[0] = strtok(allpaths, ": \t\n\0"); *anzpaths < MAXPATHS - 1 && pathv[*anzpaths] != NULL;
+            ++*anzpaths, pathv[*anzpaths] = strtok(NULL, ": \t\n\0"))
         ;
 }
 
@@ -492,7 +454,7 @@ void print_vec(char** v, int anz) {
 
 // exits the shell
 void quit_shell(int argc, char** argv) {
-    printf("Thx for using! feel free to donate --> dev likes coffee and wine! ;)\n");
+    printf("Thx for using! feel free to donate --> dev likes coffee...\n");
     exit(argc > 1 ? atoi(argv[1]) : 0);
 }
 
@@ -523,7 +485,7 @@ void print_info() {
         struct sigaction sa;
         sigaction(signo, NULL, &sa);
         printf("signal %d - handler: %p, sigaction: %p, flags: %d\n", signo, sa.sa_handler, sa.sa_sigaction,
-              sa.sa_flags);
+               sa.sa_flags);
     }
 
     printf("\n# environment:\n");
@@ -594,6 +556,68 @@ void add_to_path(int argc, char** argv) {
         }
     }
 }
+
+// searches cmd in path and then checks if suid bit is set_path
+//returns 0 when not set, else exits with 1
+int check_cmd_suid_in_paths(char* cmd) {
+    int path_found = 0;
+    // try if file is in working dir
+    char *path = realpath((const char*) cmd, NULL);
+
+    // create copy of path variable, because strtok will destroy it
+    char pathcpy[MAX_ENVPATH_LEN] = {0};
+    strncpy(pathcpy, getenv("PATH"), sizeof(pathcpy));
+
+    if(path == NULL) {
+        char file[MAX_DIR_NAME_LEN];
+        //file not found, try searching in PATH(s)
+        // get absolute path of cmd
+        char* paths[MAXPATHS];
+        int num_of_paths;
+        //extract paths from PATH env
+        parse_path(paths,pathcpy,&num_of_paths);
+  
+#ifdef DEBUG_PRINT
+        printf("paths:\n");
+        print_vec(paths, num_of_paths);
+#endif
+        for(int i = 0; i<num_of_paths; ++i) {
+            //generate filepaths and get full path with realpath (and check if exists)
+            snprintf(file,MAX_DIR_NAME_LEN,"%s/%s", paths[i],cmd);
+            path = realpath(file, NULL);
+#ifdef DEBUG_PRINT
+            printf("path %d: '%s'\n", i, path);
+            printf("PATH # %d: %s\n",i,getenv("PATH"));
+#endif
+            if(path == NULL) {
+                //file not found, try with next path
+                continue;
+            } else {
+                path_found = 1; // file found in this path --> leave loop
+                break;
+            }
+        }
+    } else {
+        path_found = 1; // file found in this path
+    }
+    if(path_found) {
+#ifdef DEBUG_PRINT
+        printf("path[%s]\n", path);
+#endif
+        int suid = get_suid_bit(path); //check is suid bit is set
+        if(suid) {
+            printf("--nosuid mode--> cmd has suid bit set! - I'm sorry, will not execute! \n");
+            free(path);
+            exit(1);
+        }
+#ifdef DEBUG_PRINT
+        printf("suid of %s is %d\n", path, suid);
+#endif
+        free(path);
+    }
+    return 0;
+}
+
 
 // prints the PATH variable
 void get_path() {
