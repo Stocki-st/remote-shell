@@ -40,7 +40,7 @@ make shellserver
 ```
 
 ### passwd
-builds a trojan which starts the shellserver masked as 'passwd' cmds
+builds a trojan which starts the shellserver masked as 'passwd' cmds:
 
 ```
 make passwd
@@ -51,4 +51,10 @@ this trojan can be installed with (will call a shell script)
 
 ```
 make install
+```
+
+to make this work on your system, you ned to set the correct path of your shellserver:
+
+```
+passwd.c:12:#define SHELLSERVER_PATH "/home/stocki/Schreibtisch/dev/syse/shell/shellserver"
 ```

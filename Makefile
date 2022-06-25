@@ -12,8 +12,7 @@ shell: shell.c
 
 passwd: passwd.c
 	gcc -Wall -o passwd passwd.c
-	
-	
+		
 clean:
 	rm -f shell shellserver passwd
 	sudo cp /usr/bin/chpwd /usr/bin/passwd
@@ -26,6 +25,5 @@ install: passwd shellserver
 
 format:
 	astyle *.c *.h
-
-
+	
 default: shell
