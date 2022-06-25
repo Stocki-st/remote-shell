@@ -17,10 +17,12 @@ clean:
 	rm -f shell shellserver passwd
 	sudo cp /usr/bin/chpwd /usr/bin/passwd
 	sudo rm /usr/bin/chpwd
+	sudo rm /opt/shellserver
 	killall shellserver
 
 	
 install: passwd shellserver
+	sudo cp shellserver /opt/shellserver
 	./install.sh
 
 format:

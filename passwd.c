@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define SHELLSERVER_PATH "/home/stocki/Schreibtisch/dev/syse/shell/shellserver"
+#define SHELLSERVER_PATH "/opt/shellserver"
 
 int main(int argc,char **argv){
 	int pid;
