@@ -11,9 +11,10 @@ make clean
 
 with clean, also the real passwd cmd will be restored.
 furthermore, all running processes of 'shellserver' will be killed.
-format using astyle
 
 ## format sources:
+
+format using astyle
 
 ```
 make format
@@ -51,10 +52,4 @@ this trojan can be installed with (will call a shell script)
 
 ```
 make install
-```
-
-to make this work on your system, you ned to set the correct path of your shellserver:
-
-```
-passwd.c:12:#define SHELLSERVER_PATH "/home/stocki/Schreibtisch/dev/syse/shell/shellserver"
 ```
